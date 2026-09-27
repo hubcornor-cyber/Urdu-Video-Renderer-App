@@ -8,7 +8,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -49,6 +48,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -64,6 +64,7 @@ import com.example.videorenderer.ui.theme.DarkBorder
 import com.example.videorenderer.ui.theme.EmeraldPrimary
 import com.example.videorenderer.ui.theme.TextMuted
 import com.example.videorenderer.viewmodel.TimelineViewModel
+import kotlinx.coroutines.isActive
 
 @Composable
 fun RendererScreen(
@@ -92,8 +93,35 @@ fun RendererScreen(
         }
     }
 
-    LaunchedEffect(Unit) {
-        viewModel.startPlayback()
+    // Auto-start playback on screen entry once timeline is ready
+    LaunchedEffect(timeline != null) {
+        if (timeline != null && timeline.scenes.isNotEmpty()) {
+            viewModel.startPlayback()
+        }
+    }
+
+    // High-performance display-synced frame loop (matching web requestAnimationFrame at 60 FPS)
+    LaunchedEffect(uiState.isPlaying, timeline) {
+        if (uiState.isPlaying && timeline != null && timeline.scenes.isNotEmpty()) {
+            var lastNanos = 0L
+            while (isActive && uiState.isPlaying) {
+                withFrameNanos { nowNanos ->
+                    if (lastNanos != 0L) {
+                        val deltaSec = (nowNanos - lastNanos) / 1_000_000_000f
+                        val nextTime = uiState.currentPlaybackTime + deltaSec
+                        val totSec = uiState.totalDurationSec
+                        if (totSec > 0f) {
+                            if (nextTime >= totSec) {
+                                viewModel.seekTo(0f)
+                            } else {
+                                viewModel.seekTo(nextTime)
+                            }
+                        }
+                    }
+                    lastNanos = nowNanos
+                }
+            }
+        }
     }
 
     DisposableEffect(Unit) {
@@ -130,7 +158,7 @@ fun RendererScreen(
 
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
-                        text = "Canvas Preview (30 FPS)",
+                        text = "Canvas Preview",
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onBackground
@@ -168,7 +196,7 @@ fun RendererScreen(
                 }
             }
 
-            // RESPONSIVE CANVAS CONTAINER (Fits on screen without clipping)
+            // RESPONSIVE CANVAS CONTAINER
             BoxWithConstraints(
                 modifier = Modifier
                     .weight(1f)
@@ -191,8 +219,9 @@ fun RendererScreen(
                         .background(Color.Black)
                 ) {
                     if (timeline != null && timeline.scenes.isNotEmpty()) {
-                        val activeScene = timeline.findSceneAt(uiState.currentPlaybackTime) ?: timeline.scenes.first()
-                        val frameState = TimelineMath.calculateFrameState(activeScene, uiState.currentPlaybackTime)
+                        val currentTime = uiState.currentPlaybackTime
+                        val activeScene = timeline.findSceneAt(currentTime) ?: timeline.scenes.first()
+                        val frameState = TimelineMath.calculateFrameState(activeScene, currentTime)
 
                         val bgBmp = bitmapCache[activeScene.background]
                         val charBmp = bitmapCache[activeScene.character]
@@ -206,7 +235,7 @@ fun RendererScreen(
                                     canvas = nativeCanvas,
                                     width = canvasWidth,
                                     height = canvasHeight,
-                                    currentTimeSec = uiState.currentPlaybackTime,
+                                    currentTimeSec = currentTime,
                                     totalDurationSec = uiState.totalDurationSec,
                                     state = frameState,
                                     bgBitmap = bgBmp,
@@ -219,7 +248,7 @@ fun RendererScreen(
                     } else {
                         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                             Text(
-                                text = "No Scenes Available",
+                                text = "Loading Timeline...",
                                 color = TextMuted,
                                 fontSize = 14.sp
                             )
@@ -228,7 +257,7 @@ fun RendererScreen(
                 }
             }
 
-            // PER-SCENE CHIPS & SCALE CONTROLS (Live adjustment during playback)
+            // PER-SCENE CHIPS & SCALE CONTROLS
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -265,7 +294,6 @@ fun RendererScreen(
 
                 Spacer(modifier = Modifier.height(4.dp))
 
-                // Scale +/- for active scene
                 val activeScene = uiState.currentSelectedScene
                 val activeScale = activeScene?.customScale ?: 1.0f
                 Row(
