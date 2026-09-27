@@ -9,6 +9,11 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.material3.lightColorScheme
+import androidx.compose.ui.graphics.Color  // ← Yeh import missing hai!
+
+
 private val DarkColorScheme = darkColorScheme(
     primary = EmeraldPrimary,
     onPrimary = Color(0xFF022C22),
