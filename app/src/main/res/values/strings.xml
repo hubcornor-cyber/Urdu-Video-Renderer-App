@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">ویڈیو رینڈرر (Video Renderer)</string>
+    <string name="home_title">منظر نامہ رینڈرنگ سسٹم</string>
+    <string name="home_subtitle">JSON ٹائم لائن اور اثاثہ جات سے اعلیٰ معیار کی ویڈیو تیار کریں</string>
+    <string name="btn_load_json">جے ایس او این لوڈ کریں (Load JSON)</string>
+    <string name="btn_select_assets">اثاثہ جات فولڈر منتخب کریں (Select Assets Folder)</string>
+    <string name="btn_preview">پیش نظارہ (Preview Timeline)</string>
+    <string name="btn_export_mp4">ویڈیو رینڈر اور برآمد کریں (Render &amp; Export MP4)</string>
+    <string name="total_duration">کل دورانیہ</string>
+    <string name="total_scenes">مناظر کی تعداد</string>
+    <string name="rendering_progress">ویڈیو رینڈر ہو رہی ہے...</string>
+    <string name="export_success">ویڈیو کامیابی کے ساتھ ڈاؤن لوڈز میں محفوظ ہو گئی!</string>
+    <string name="export_failed">ویڈیو رینڈر کرنے میں خرابی پیش آگئی</string>
+    <string name="permission_required">اسٹوریج اور فائلوں تک رسائی کی اجازت درکار ہے</string>
+    <string name="no_json_loaded">براہ کرم پہلے JSON فائل منتخب کریں</string>
+    <string name="seconds">سیکنڈ</string>
+    <string name="scenes_unit">مناظر</string>
+</resources>

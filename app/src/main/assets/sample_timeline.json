@@ -1,0 +1,136 @@
+{
+  "scenes": [
+    {
+      "start": 0,
+      "end": 4,
+      "label": "Scene 1: نئی امید",
+      "background": "assets/bg-1.jpg",
+      "character": "assets/character-1.png",
+      "captionStyle": "hook",
+      "strongWords": ["نئی", "امید"],
+      "showText": true,
+      "camera": {
+        "effect": "custom",
+        "startX": 0.5,
+        "endX": 0.5,
+        "startY": 0.62,
+        "endY": 0.42,
+        "startZoom": 1.0,
+        "endZoom": 1.15
+      },
+      "characterTransform": {
+        "startX": 0.52,
+        "endX": 0.49,
+        "startY": 0.78,
+        "endY": 0.78,
+        "startScale": 1.03,
+        "endScale": 1.25,
+        "startRotation": 0.0,
+        "endRotation": 2.0,
+        "entrance": "fade-in",
+        "opacity": 1.0
+      }
+    },
+    {
+      "start": 4,
+      "end": 8,
+      "label": "Scene 2: خوابوں کا سفر",
+      "background": "assets/bg-2.jpg",
+      "character": "assets/character-2.png",
+      "captionStyle": "hook",
+      "strongWords": ["خواب", "سفر"],
+      "showText": true,
+      "camera": {
+        "effect": "custom",
+        "startX": 0.45,
+        "endX": 0.55,
+        "startY": 0.5,
+        "endY": 0.45,
+        "startZoom": 1.1,
+        "endZoom": 1.25
+      },
+      "characterTransform": {
+        "startX": 0.48,
+        "endX": 0.52,
+        "startY": 0.8,
+        "endY": 0.75,
+        "startScale": 1.1,
+        "endScale": 1.3,
+        "startRotation": -2.0,
+        "endRotation": 1.0,
+        "entrance": "fade-in",
+        "opacity": 1.0
+      }
+    },
+    {
+      "start": 8,
+      "end": 12,
+      "label": "Scene 3: مشکلات اور عزم",
+      "background": "assets/bg-3.jpg",
+      "character": "assets/character-1.png",
+      "captionStyle": "hook",
+      "strongWords": ["مشکلات", "عزم"],
+      "showText": true,
+      "camera": {
+        "effect": "custom",
+        "startX": 0.52,
+        "endX": 0.48,
+        "startY": 0.42,
+        "endY": 0.58,
+        "startZoom": 1.2,
+        "endZoom": 1.05
+      },
+      "characterTransform": {
+        "startX": 0.5,
+        "endX": 0.5,
+        "startY": 0.76,
+        "endY": 0.76,
+        "startScale": 1.2,
+        "endScale": 1.1,
+        "startRotation": 1.5,
+        "endRotation": -1.5,
+        "entrance": "fade-in",
+        "opacity": 1.0
+      }
+    },
+    {
+      "start": 12,
+      "end": 16,
+      "label": "Scene 4: منزل اور کامیابی",
+      "background": "assets/bg-4.jpg",
+      "character": "assets/character-2.png",
+      "captionStyle": "hook",
+      "strongWords": ["منزل", "کامیابی"],
+      "showText": true,
+      "camera": {
+        "effect": "custom",
+        "startX": 0.5,
+        "endX": 0.5,
+        "startY": 0.48,
+        "endY": 0.38,
+        "startZoom": 1.05,
+        "endZoom": 1.3
+      },
+      "characterTransform": {
+        "startX": 0.5,
+        "endX": 0.5,
+        "startY": 0.74,
+        "endY": 0.72,
+        "startScale": 1.15,
+        "endScale": 1.35,
+        "startRotation": 0.0,
+        "endRotation": 0.0,
+        "entrance": "fade-in",
+        "opacity": 1.0
+      }
+    }
+  ],
+  "settings": {
+    "resolution": "1080x1920",
+    "fps": "30",
+    "quality": "8000000",
+    "format": "mp4",
+    "voiceVolume": "1.0",
+    "musicVolume": "0.25"
+  }
+}
