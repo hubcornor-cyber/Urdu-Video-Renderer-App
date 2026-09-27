@@ -21,8 +21,8 @@ private val DarkColorScheme = darkColorScheme(
     onPrimary = Color.White,
     onSecondary = Color.Black,
     onTertiary = Color.White,
-    onBackground = Color(0xFF1F2937), // Light text
-    onSurface = Color(0xFF1F2937),
+    onBackground = Color(0xFFF8FAFC), // White/light text on dark background
+    onSurface = Color(0xFFF8FAFC),
     error = Color(0xFFEF4444)         // Red
 )
 
@@ -54,13 +54,15 @@ fun UrduVideoRendererTheme(
             if (window != null) {
                 window.statusBarColor = colorScheme.background.toArgb()
                 window.navigationBarColor = colorScheme.background.toArgb()
-                WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = darkTheme
+                WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !darkTheme
+                WindowCompat.getInsetsController(window, view).isAppearanceLightNavigationBars = !darkTheme
             }
         }
     }
 
     MaterialTheme(
         colorScheme = colorScheme,
+        typography = Typography,
         content = content
     )
 }

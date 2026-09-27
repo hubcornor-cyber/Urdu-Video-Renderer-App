@@ -17,7 +17,7 @@ import kotlin.math.min
 
 /**
  * High-performance, frame-accurate Android Canvas Renderer.
- * Shared by both the real-time interactive Preview Canvas and the MediaCodec video export encoder.
+ * Supports dynamic character scale multiplier (increase/decrease size) and responsive viewport scaling.
  */
 class TimelineCanvasRenderer {
 
@@ -67,16 +67,6 @@ class TimelineCanvasRenderer {
 
     /**
      * Renders a single timeline frame to the provided Canvas.
-     *
-     * @param canvas Target destination canvas (screen surface or MediaCodec input surface).
-     * @param width Canvas width in pixels (e.g. 1080).
-     * @param height Canvas height in pixels (e.g. 1920).
-     * @param currentTimeSec Playback position in seconds.
-     * @param totalDurationSec Total timeline length.
-     * @param state Interpolated camera & character values.
-     * @param bgBitmap Loaded background Bitmap, or null if missing.
-     * @param charBitmap Loaded character Bitmap, or null if missing.
-     * @param showHud Whether to render debug timestamp/scene HUD.
      */
     fun renderFrame(
         canvas: Canvas,
@@ -87,6 +77,7 @@ class TimelineCanvasRenderer {
         state: InterpolatedFrameState,
         bgBitmap: Bitmap?,
         charBitmap: Bitmap?,
+        characterScaleMultiplier: Float = 1.0f,
         showHud: Boolean = true
     ) {
         val scene = state.scene
@@ -95,15 +86,14 @@ class TimelineCanvasRenderer {
         if (bgBitmap != null && !bgBitmap.isRecycled) {
             drawBackgroundWithCamera(canvas, width, height, bgBitmap, state)
         } else {
-            // Missing background fallback
             drawMissingBackgroundFallback(canvas, width, height, scene)
         }
 
-        // 2. DRAW CHARACTER WITH TRANSFORM
+        // 2. DRAW CHARACTER WITH TRANSFORM & SCALE MULTIPLIER
         if (charBitmap != null && !charBitmap.isRecycled) {
-            drawCharacterWithTransform(canvas, width, height, charBitmap, state)
+            drawCharacterWithTransform(canvas, width, height, charBitmap, state, characterScaleMultiplier)
         } else if (scene.character.isNotBlank()) {
-            drawMissingCharacterFallback(canvas, width, height, state)
+            drawMissingCharacterFallback(canvas, width, height, state, characterScaleMultiplier)
         }
 
         // 3. DRAW CAPTIONS (URDU STRONG WORDS)
@@ -119,7 +109,6 @@ class TimelineCanvasRenderer {
 
     /**
      * Draws background with camera pan and zoom interpolation.
-     * Centers on (cameraX, cameraY) relative to bitmap dimensions.
      */
     private fun drawBackgroundWithCamera(
         canvas: Canvas,
@@ -132,7 +121,6 @@ class TimelineCanvasRenderer {
         val bh = bitmap.height.toFloat()
         val zoom = max(1.0f, state.cameraZoom)
 
-        // Calculate aspect ratio scale
         val targetAspect = width.toFloat() / height.toFloat()
         val bmpAspect = bw / bh
 
@@ -147,7 +135,6 @@ class TimelineCanvasRenderer {
             visibleHeight = visibleWidth / targetAspect
         }
 
-        // Clamp camera center so crop stays within bounds
         val halfW = visibleWidth / 2f
         val halfH = visibleHeight / 2f
 
@@ -165,9 +152,6 @@ class TimelineCanvasRenderer {
         canvas.drawBitmap(bitmap, srcRect, dstRect, bgPaint)
     }
 
-    /**
-     * Fallback gradient when background asset is missing.
-     */
     private fun drawMissingBackgroundFallback(
         canvas: Canvas,
         width: Int,
@@ -183,46 +167,35 @@ class TimelineCanvasRenderer {
         canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), placeholderPaint)
         placeholderPaint.shader = null
 
-        // Placeholder notice
         val notePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.argb(140, 255, 255, 255)
             textSize = 42f
             textAlign = Paint.Align.CENTER
         }
-        canvas.drawText(
-            "پس منظر موجود نہیں: ${scene.background}",
-            width / 2f,
-            height / 2f - 60f,
-            notePaint
-        )
-        canvas.drawText(
-            "Missing asset: ${scene.background}",
-            width / 2f,
-            height / 2f,
-            notePaint
-        )
+        canvas.drawText("پس منظر موجود نہیں: ${scene.background}", width / 2f, height / 2f - 40f, notePaint)
+        canvas.drawText("Missing asset: ${scene.background}", width / 2f, height / 2f + 20f, notePaint)
     }
 
     /**
-     * Draws character sprite with translated pivot, scaling, rotation, and opacity.
+     * Draws character sprite with translated pivot, scaling, rotation, opacity, and scale multiplier.
      */
     private fun drawCharacterWithTransform(
         canvas: Canvas,
         width: Int,
         height: Int,
         bitmap: Bitmap,
-        state: InterpolatedFrameState
+        state: InterpolatedFrameState,
+        scaleMultiplier: Float
     ) {
         val cx = state.characterX * width
         val cy = state.characterY * height
-        val scale = state.characterScale
+        val scale = state.characterScale * scaleMultiplier
         val rotation = state.characterRotation
         val alpha = (state.characterOpacity * 255).toInt().coerceIn(0, 255)
 
         charPaint.alpha = alpha
 
         matrix.reset()
-        // Center of the character sprite pivot
         val pw = bitmap.width / 2f
         val ph = bitmap.height / 2f
 
@@ -234,18 +207,16 @@ class TimelineCanvasRenderer {
         canvas.drawBitmap(bitmap, matrix, charPaint)
     }
 
-    /**
-     * Fallback silhouette for missing character asset.
-     */
     private fun drawMissingCharacterFallback(
         canvas: Canvas,
         width: Int,
         height: Int,
-        state: InterpolatedFrameState
+        state: InterpolatedFrameState,
+        scaleMultiplier: Float
     ) {
         val cx = state.characterX * width
         val cy = state.characterY * height
-        val radius = 120f * state.characterScale
+        val radius = 120f * state.characterScale * scaleMultiplier
 
         val charGhostPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.argb((state.characterOpacity * 180).toInt(), 16, 185, 129)
@@ -263,9 +234,6 @@ class TimelineCanvasRenderer {
         )
     }
 
-    /**
-     * Draws strong words captions near top (Urdu RTL layout).
-     */
     private fun drawUrduCaptions(
         canvas: Canvas,
         width: Int,
@@ -275,14 +243,13 @@ class TimelineCanvasRenderer {
         val strongWords = scene.strongWords
         if (strongWords.isEmpty()) return
 
-        // Join words in Urdu RTL order
         val captionText = strongWords.joinToString(" • ")
 
         val textBounds = Rect()
         strongWordPaint.getTextBounds(captionText, 0, captionText.length, textBounds)
-        val pillWidth = (textBounds.width() + 140f).coerceAtLeast(400f)
-        val pillHeight = 130f
-        val topY = height * 0.12f
+        val pillWidth = (textBounds.width() + 140f).coerceAtLeast(360f).coerceAtMost(width * 0.9f)
+        val pillHeight = 120f
+        val topY = height * 0.10f
 
         val pillRect = RectF(
             (width - pillWidth) / 2f,
@@ -291,18 +258,13 @@ class TimelineCanvasRenderer {
             topY + pillHeight
         )
 
-        // Backdrop pill
-        canvas.drawRoundRect(pillRect, 32f, 32f, captionBgPaint)
-        canvas.drawRoundRect(pillRect, 32f, 32f, captionStrokePaint)
+        canvas.drawRoundRect(pillRect, 28f, 28f, captionBgPaint)
+        canvas.drawRoundRect(pillRect, 28f, 28f, captionStrokePaint)
 
-        // Draw Urdu Strong Words inside the banner
         val textY = topY + pillHeight / 2f + (textBounds.height() / 2f) - 6f
         canvas.drawText(captionText, width / 2f, textY, strongWordPaint)
     }
 
-    /**
-     * Draws lightweight timestamp and active scene info HUD overlay.
-     */
     private fun drawHudOverlay(
         canvas: Canvas,
         width: Int,
@@ -311,13 +273,13 @@ class TimelineCanvasRenderer {
         totalDurationSec: Float,
         scene: SceneItem
     ) {
-        val pad = 36f
-        val hudH = 110f
+        val pad = 32f
+        val hudH = 100f
         val hudW = width - (pad * 2)
         val hudTop = height - hudH - pad
 
         val rect = RectF(pad, hudTop, pad + hudW, hudTop + hudH)
-        canvas.drawRoundRect(rect, 20f, 20f, hudBgPaint)
+        canvas.drawRoundRect(rect, 18f, 18f, hudBgPaint)
 
         val curM = (currentTimeSec / 60).toInt()
         val curS = (currentTimeSec % 60).toInt()
@@ -329,7 +291,7 @@ class TimelineCanvasRenderer {
         val timeStr = String.format("%02d:%02d.%02d / %02d:%02d", curM, curS, curMs, totM, totS)
         val sceneStr = "${scene.label} (${String.format("%.1f", scene.start)}s - ${String.format("%.1f", scene.end)}s)"
 
-        canvas.drawText(timeStr, pad + 24f, hudTop + 48f, hudPaint)
-        canvas.drawText(sceneStr, pad + 24f, hudTop + 90f, hudPaint)
+        canvas.drawText(timeStr, pad + 20f, hudTop + 42f, hudPaint)
+        canvas.drawText(sceneStr, pad + 20f, hudTop + 82f, hudPaint)
     }
 }

@@ -37,21 +37,18 @@ class VideoExportService(
         private const val MIME_TYPE_VIDEO = MediaFormat.MIMETYPE_VIDEO_AVC // H.264
         private const val I_FRAME_INTERVAL = 1 // Keyframe every 1 second
         private const val TIMEOUT_USEC = 10_000L
+        private const val MAX_EOS_RETRIES = 15 // Prevents infinite freeze on final frame
     }
 
     private val renderer = TimelineCanvasRenderer()
 
     /**
      * Renders the complete timeline to an MP4 video on a background thread.
-     *
-     * @param timeline The parsed JSON timeline.
-     * @param assetsTreeUri Optional SAF directory uri containing assets.
-     * @param onProgress Callback invoked with progress fraction (0.0 to 1.0).
-     * @return Result containing the saved file Uri or Exception.
      */
     suspend fun exportVideo(
         timeline: TimelineData,
         assetsTreeUri: Uri?,
+        characterScaleMultiplier: Float = 1.0f,
         onProgress: suspend (progress: Float, currentFrame: Int, totalFrames: Int) -> Unit
     ): Result<Uri> = withContext(Dispatchers.Default) {
         val width = timeline.settings.width
@@ -64,7 +61,8 @@ class VideoExportService(
             return@withContext Result.failure(IllegalArgumentException("Timeline duration is 0 seconds."))
         }
 
-        val totalFrames = (durationSec * fps).toInt().coerceAtLeast(1)
+        // Calculate exact total frames rounded to nearest integer
+        val totalFrames = Math.round(durationSec * fps).toInt().coerceAtLeast(1)
         val tempOutputFile = File(context.cacheDir, "temp_render_${System.currentTimeMillis()}.mp4")
 
         var mediaCodec: MediaCodec? = null
@@ -96,7 +94,6 @@ class VideoExportService(
             mediaMuxer = MediaMuxer(tempOutputFile.absolutePath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
 
             val bufferInfo = MediaCodec.BufferInfo()
-            val frameDurationUs = 1_000_000L / fps
 
             // 3. Render frame by frame
             for (frameIndex in 0 until totalFrames) {
@@ -129,6 +126,7 @@ class VideoExportService(
                         state = state,
                         bgBitmap = bgBmp,
                         charBitmap = charBmp,
+                        characterScaleMultiplier = characterScaleMultiplier,
                         showHud = false
                     )
                 } finally {
@@ -142,35 +140,43 @@ class VideoExportService(
                     bufferInfo = bufferInfo,
                     videoTrackIndex = videoTrackIndex,
                     muxerStarted = muxerStarted,
-                    endOfStream = (frameIndex == totalFrames - 1)
+                    endOfStream = false
                 ).also { muxerStarted = true }
 
-                // Update progress callback
-                val progress = (frameIndex + 1).toFloat() / totalFrames
-                onProgress(progress, frameIndex + 1, totalFrames)
+                // Update progress callback with strictly clamped frame numbers
+                val currentDisplayFrame = (frameIndex + 1).coerceAtMost(totalFrames)
+                val progress = currentDisplayFrame.toFloat() / totalFrames
+                onProgress(progress, currentDisplayFrame, totalFrames)
             }
 
-            // Signal End of Stream
-            mediaCodec.signalEndOfInputStream()
+            // Signal End of Stream to MediaCodec
+            try {
+                mediaCodec.signalEndOfInputStream()
+            } catch (e: Exception) {
+                Log.w(TAG, "Error signaling end of input stream", e)
+            }
 
-            // Final drain until EOS buffer arrives
+            // Final drain until EOS buffer arrives (with timeout to prevent freeze!)
             drainEncoder(
                 mediaCodec = mediaCodec,
                 mediaMuxer = mediaMuxer,
                 bufferInfo = bufferInfo,
                 videoTrackIndex = videoTrackIndex,
-                muxerStarted = true,
+                muxerStarted = muxerStarted,
                 endOfStream = true
             )
 
-            // Stop and release encoding components
-            try { mediaCodec.stop() } catch (e: Exception) { Log.w(TAG, "Codec stop", e) }
+            // Ensure UI shows 100% completion
+            onProgress(1.0f, totalFrames, totalFrames)
+
+            // Stop and release encoding components safely
+            try { mediaCodec.stop() } catch (e: Exception) { Log.w(TAG, "Codec stop exception", e) }
             try {
                 if (muxerStarted) {
                     mediaMuxer.stop()
                 }
             } catch (e: Exception) {
-                Log.w(TAG, "Muxer stop", e)
+                Log.w(TAG, "Muxer stop exception", e)
             }
 
             // 4. Save MP4 to Downloads folder
@@ -193,6 +199,7 @@ class VideoExportService(
 
     /**
      * Drains available output buffers from MediaCodec and writes them to MediaMuxer.
+     * Prevents infinite loop at EOS by using MAX_EOS_RETRIES counter.
      */
     private fun drainEncoder(
         mediaCodec: MediaCodec,
@@ -204,11 +211,23 @@ class VideoExportService(
     ): Int {
         var currentTrackIndex = videoTrackIndex
         var isStarted = muxerStarted
+        var eosRetries = 0
 
         while (true) {
             val encoderStatus = mediaCodec.dequeueOutputBuffer(bufferInfo, TIMEOUT_USEC)
             if (encoderStatus == MediaCodec.INFO_TRY_AGAIN_LATER) {
-                if (!endOfStream) break // no output available yet
+                if (!endOfStream) {
+                    break // No data available right now, continue encoding loop
+                } else {
+                    eosRetries++
+                    if (eosRetries >= MAX_EOS_RETRIES) {
+                        Log.w(TAG, "EOS drain timed out after $MAX_EOS_RETRIES attempts, exiting drain loop.")
+                        break
+                    }
+                    try {
+                        Thread.sleep(10)
+                    } catch (_: Exception) {}
+                }
             } else if (encoderStatus == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
                 if (isStarted) {
                     Log.w(TAG, "Format changed after muxer started")
@@ -228,12 +247,17 @@ class VideoExportService(
                     if (bufferInfo.size != 0 && isStarted && currentTrackIndex >= 0) {
                         encodedData.position(bufferInfo.offset)
                         encodedData.limit(bufferInfo.offset + bufferInfo.size)
-                        mediaMuxer.writeSampleData(currentTrackIndex, encodedData, bufferInfo)
+                        try {
+                            mediaMuxer.writeSampleData(currentTrackIndex, encodedData, bufferInfo)
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Exception writing sample data", e)
+                        }
                     }
 
                     mediaCodec.releaseOutputBuffer(encoderStatus, false)
 
                     if ((bufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) {
+                        Log.i(TAG, "EOS reached successfully.")
                         break
                     }
                 }

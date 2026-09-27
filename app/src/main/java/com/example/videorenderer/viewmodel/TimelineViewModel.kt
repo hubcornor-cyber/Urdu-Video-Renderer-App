@@ -18,7 +18,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 /**
- * UI State holding timeline configuration, playback progress, and video export status.
+ * UI State holding timeline configuration, playback progress, character scale, and video export status.
  */
 data class TimelineUiState(
     val isLoading: Boolean = false,
@@ -30,6 +30,7 @@ data class TimelineUiState(
     val sceneCount: Int = 0,
     val currentPlaybackTime: Float = 0f,
     val isPlaying: Boolean = false,
+    val characterScaleMultiplier: Float = 1.0f, // Option to increase / decrease character size
     val isRendering: Boolean = false,
     val renderProgress: Float = 0f,
     val currentRenderFrame: Int = 0,
@@ -54,13 +55,9 @@ class TimelineViewModel(application: Application) : AndroidViewModel(application
     private var playbackJob: Job? = null
 
     init {
-        // Automatically load demo sample timeline initially so the user has immediate data
         loadSampleTimeline()
     }
 
-    /**
-     * Loads the default sample timeline from packaged assets.
-     */
     fun loadSampleTimeline() {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
@@ -90,9 +87,6 @@ class TimelineViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    /**
-     * Parses timeline from a user-selected file URI.
-     */
     fun loadTimelineFromUri(uri: Uri, displayName: String) {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
@@ -122,9 +116,6 @@ class TimelineViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    /**
-     * Sets the user-selected folder containing background and character image assets.
-     */
     fun setAssetsFolderUri(uri: Uri, folderName: String) {
         _uiState.update {
             it.copy(
@@ -135,9 +126,27 @@ class TimelineViewModel(application: Application) : AndroidViewModel(application
         repository.clearCache()
     }
 
-    /**
-     * Toggles playback on the real-time preview canvas.
-     */
+    // Character Scale controls (Increase / Decrease character size)
+    fun increaseCharacterScale() {
+        _uiState.update {
+            val newScale = (it.characterScaleMultiplier + 0.1f).coerceAtMost(3.0f)
+            it.copy(characterScaleMultiplier = Math.round(newScale * 10f) / 10f)
+        }
+    }
+
+    fun decreaseCharacterScale() {
+        _uiState.update {
+            val newScale = (it.characterScaleMultiplier - 0.1f).coerceAtLeast(0.3f)
+            it.copy(characterScaleMultiplier = Math.round(newScale * 10f) / 10f)
+        }
+    }
+
+    fun setCharacterScale(scale: Float) {
+        _uiState.update {
+            it.copy(characterScaleMultiplier = scale.coerceIn(0.3f, 3.0f))
+        }
+    }
+
     fun togglePlayback() {
         if (_uiState.value.isPlaying) {
             pausePlayback()
@@ -162,7 +171,7 @@ class TimelineViewModel(application: Application) : AndroidViewModel(application
                 _uiState.update { state ->
                     val nextTime = state.currentPlaybackTime + stepSec
                     if (nextTime >= state.totalDurationSec) {
-                        state.copy(currentPlaybackTime = 0f, isPlaying = true) // Loop playback
+                        state.copy(currentPlaybackTime = 0f, isPlaying = true)
                     } else {
                         state.copy(currentPlaybackTime = nextTime)
                     }
@@ -194,12 +203,14 @@ class TimelineViewModel(application: Application) : AndroidViewModel(application
         pausePlayback()
 
         viewModelScope.launch {
+            val totalFrames = Math.round(timeline.totalDurationSec * timeline.settings.fpsInt).toInt().coerceAtLeast(1)
+
             _uiState.update {
                 it.copy(
                     isRendering = true,
                     renderProgress = 0f,
                     currentRenderFrame = 0,
-                    totalRenderFrames = (timeline.totalDurationSec * timeline.settings.fpsInt).toInt(),
+                    totalRenderFrames = totalFrames,
                     exportStatusMessage = "ویڈیو رینڈر ہو رہی ہے...",
                     errorMessage = null,
                     exportedVideoUri = null
@@ -209,12 +220,13 @@ class TimelineViewModel(application: Application) : AndroidViewModel(application
             val result = exportService.exportVideo(
                 timeline = timeline,
                 assetsTreeUri = _uiState.value.assetsTreeUri,
-                onProgress = { progress, currentFrame, totalFrames ->
+                characterScaleMultiplier = _uiState.value.characterScaleMultiplier,
+                onProgress = { progress, currentFrame, total ->
                     _uiState.update {
                         it.copy(
-                            renderProgress = progress,
-                            currentRenderFrame = currentFrame,
-                            totalRenderFrames = totalFrames
+                            renderProgress = progress.coerceIn(0f, 1f),
+                            currentRenderFrame = currentFrame.coerceAtMost(total),
+                            totalRenderFrames = total
                         )
                     }
                 }
@@ -225,6 +237,8 @@ class TimelineViewModel(application: Application) : AndroidViewModel(application
                     _uiState.update {
                         it.copy(
                             isRendering = false,
+                            renderProgress = 1.0f,
+                            currentRenderFrame = totalFrames,
                             exportStatusMessage = "ویڈیو کامیابی سے برآمد ہو گئی! (Downloads/rendered_video.mp4)",
                             exportedVideoUri = uri
                         )

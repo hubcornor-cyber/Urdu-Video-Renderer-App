@@ -6,22 +6,28 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Replay
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.Button
@@ -52,6 +58,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.videorenderer.renderer.TimelineCanvasRenderer
 import com.example.videorenderer.renderer.TimelineMath
+import com.example.videorenderer.ui.theme.AmberAccent
 import com.example.videorenderer.ui.theme.DarkBorder
 import com.example.videorenderer.ui.theme.DarkCard
 import com.example.videorenderer.ui.theme.EmeraldPrimary
@@ -71,7 +78,6 @@ fun RendererScreen(
     val renderer = remember { TimelineCanvasRenderer() }
     val repository = remember { viewModel.getRepository() }
 
-    // Cached bitmaps in Compose state
     val bitmapCache = remember { mutableStateMapOf<String, Bitmap?>() }
 
     // Preload scene assets whenever timeline changes
@@ -88,12 +94,10 @@ fun RendererScreen(
         }
     }
 
-    // Auto-start 30 FPS playback upon entering preview
     LaunchedEffect(Unit) {
         viewModel.startPlayback()
     }
 
-    // Pause playback when leaving preview
     DisposableEffect(Unit) {
         onDispose {
             viewModel.pausePlayback()
@@ -101,18 +105,20 @@ fun RendererScreen(
     }
 
     Surface(
-        modifier = modifier.fillMaxSize(),
+        modifier = modifier
+            .fillMaxSize()
+            .safeDrawingPadding(), // Ensures screen top & bottom content never go off-screen
         color = MaterialTheme.colorScheme.background
     ) {
         Column(
             modifier = Modifier.fillMaxSize(),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Top App Bar
+            // TOP BAR (Compact, within safe area)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
@@ -120,21 +126,21 @@ fun RendererScreen(
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = "واپس (Back)",
-                        tint = TextPrimary
+                        tint = MaterialTheme.colorScheme.onBackground
                     )
                 }
 
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
                         text = "پیش نظارہ کینوس (30 FPS)",
-                        fontSize = 16.sp,
+                        fontSize = 15.sp,
                         fontWeight = FontWeight.Bold,
-                        color = TextPrimary
+                        color = MaterialTheme.colorScheme.onBackground
                     )
                     Text(
-                        text = "${timeline?.settings?.resolution ?: "1080x1920"} @ 30 FPS",
-                        fontSize = 11.sp,
-                        color = TextMuted
+                        text = "${timeline?.settings?.resolution ?: "1080x1920"} • سائز: ${String.format("%.1f", uiState.characterScaleMultiplier)}x",
+                        fontSize = 10.sp,
+                        color = EmeraldPrimary
                     )
                 }
 
@@ -144,37 +150,46 @@ fun RendererScreen(
                         onNavigateBack()
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary),
-                    shape = RoundedCornerShape(10.dp),
-                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 4.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Default.Videocam,
                         contentDescription = null,
                         tint = Color(0xFF022C22),
-                        modifier = Modifier.size(16.dp)
+                        modifier = Modifier.size(15.dp)
                     )
-                    Spacer(modifier = Modifier.width(4.dp))
+                    Spacer(modifier = Modifier.width(3.dp))
                     Text(
-                        text = "برآمد (Export)",
-                        fontSize = 12.sp,
+                        text = "برآمد",
+                        fontSize = 11.sp,
                         color = Color(0xFF022C22),
                         fontWeight = FontWeight.Bold
                     )
                 }
             }
 
-            // MAIN VIDEO CANVAS (9:16 vertical ratio)
-            Box(
+            // RESPONSIVE CANVAS CONTAINER (Fits inside remaining height without pushing menu off-screen)
+            BoxWithConstraints(
                 modifier = Modifier
                     .weight(1f)
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 4.dp),
                 contentAlignment = Alignment.Center
             ) {
+                val availableWidth = maxWidth
+                val availableHeight = maxHeight
+
+                // Calculate optimal 9:16 aspect ratio box that fits within bounds
+                val targetAspect = 9f / 16f
+                val boxWidth = minOf(availableWidth, availableHeight * targetAspect)
+                val boxHeight = boxWidth / targetAspect
+
                 Box(
                     modifier = Modifier
-                        .aspectRatio(9f / 16f)
-                        .clip(RoundedCornerShape(16.dp))
-                        .border(1.5.dp, DarkBorder, RoundedCornerShape(16.dp))
+                        .size(width = boxWidth, height = boxHeight)
+                        .clip(RoundedCornerShape(14.dp))
+                        .border(1.5.dp, DarkBorder, RoundedCornerShape(14.dp))
                         .background(Color.Black)
                 ) {
                     if (timeline != null && timeline.scenes.isNotEmpty()) {
@@ -198,6 +213,7 @@ fun RendererScreen(
                                     state = frameState,
                                     bgBitmap = bgBmp,
                                     charBitmap = charBmp,
+                                    characterScaleMultiplier = uiState.characterScaleMultiplier,
                                     showHud = true
                                 )
                             }
@@ -207,23 +223,82 @@ fun RendererScreen(
                             Text(
                                 text = "کوئی منظر دستیاب نہیں",
                                 color = TextMuted,
-                                fontSize = 16.sp
+                                fontSize = 14.sp
                             )
                         }
                     }
                 }
             }
 
-            // BOTTOM PLAYBACK CONTROLS PANEL
+            // CHARACTER SCALE QUICK BAR (Live size adjustment while watching)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 2.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Person,
+                        contentDescription = null,
+                        tint = AmberAccent,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "کردار: ${String.format("%.1f", uiState.characterScaleMultiplier)}x",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onBackground
+                    )
+                }
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(
+                        onClick = { viewModel.decreaseCharacterScale() },
+                        modifier = Modifier
+                            .size(28.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.surface)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Remove,
+                            contentDescription = "چھوٹا",
+                            tint = MaterialTheme.colorScheme.onBackground,
+                            modifier = Modifier.size(14.dp)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(8.dp))
+
+                    IconButton(
+                        onClick = { viewModel.increaseCharacterScale() },
+                        modifier = Modifier
+                            .size(28.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.surface)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = "بڑا",
+                            tint = MaterialTheme.colorScheme.onBackground,
+                            modifier = Modifier.size(14.dp)
+                        )
+                    }
+                }
+            }
+
+            // BOTTOM PLAYBACK CONTROLS PANEL (Guaranteed to stay on screen)
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .border(1.dp, DarkBorder, RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)),
-                colors = CardDefaults.cardColors(containerColor = DarkCard),
-                shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)
+                    .border(1.dp, DarkBorder, RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
             ) {
                 Column(
-                    modifier = Modifier.padding(16.dp),
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     // Time and Scene indicator
@@ -238,9 +313,10 @@ fun RendererScreen(
 
                         Text(
                             text = activeScene?.label ?: "منظر نامہ",
-                            fontSize = 13.sp,
+                            fontSize = 12.sp,
                             fontWeight = FontWeight.Medium,
-                            color = EmeraldPrimary
+                            color = EmeraldPrimary,
+                            maxLines = 1
                         )
 
                         Text(
@@ -248,9 +324,9 @@ fun RendererScreen(
                                 (curSec / 60).toInt(), (curSec % 60).toInt(),
                                 (totSec / 60).toInt(), (totSec % 60).toInt()
                             ),
-                            fontSize = 13.sp,
+                            fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
-                            color = TextSecondary
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
 
@@ -259,11 +335,13 @@ fun RendererScreen(
                         value = uiState.currentPlaybackTime,
                         onValueChange = { newTime -> viewModel.seekTo(newTime) },
                         valueRange = 0f..uiState.totalDurationSec.coerceAtLeast(0.1f),
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(28.dp),
                         colors = SliderDefaults.colors(
                             thumbColor = EmeraldPrimary,
                             activeTrackColor = EmeraldPrimary,
-                            inactiveTrackColor = Color(0xFF334155)
+                            inactiveTrackColor = DarkBorder
                         )
                     )
 
@@ -273,28 +351,27 @@ fun RendererScreen(
                         horizontalArrangement = Arrangement.Center,
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        // Replay to 0
                         IconButton(
                             onClick = { viewModel.seekTo(0f) },
                             modifier = Modifier
-                                .size(44.dp)
+                                .size(36.dp)
                                 .clip(CircleShape)
-                                .background(Color(0xFF334155))
+                                .background(MaterialTheme.colorScheme.background)
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Replay,
                                 contentDescription = "دوبارہ چلائیں (Replay)",
-                                tint = TextPrimary
+                                tint = MaterialTheme.colorScheme.onBackground,
+                                modifier = Modifier.size(18.dp)
                             )
                         }
 
-                        Spacer(modifier = Modifier.width(20.dp))
+                        Spacer(modifier = Modifier.width(16.dp))
 
-                        // Play / Pause Toggle
                         IconButton(
                             onClick = { viewModel.togglePlayback() },
                             modifier = Modifier
-                                .size(56.dp)
+                                .size(46.dp)
                                 .clip(CircleShape)
                                 .background(EmeraldPrimary)
                         ) {
@@ -302,7 +379,7 @@ fun RendererScreen(
                                 imageVector = if (uiState.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
                                 contentDescription = if (uiState.isPlaying) "روکیں (Pause)" else "چلائیں (Play)",
                                 tint = Color(0xFF022C22),
-                                modifier = Modifier.size(32.dp)
+                                modifier = Modifier.size(26.dp)
                             )
                         }
                     }

@@ -28,8 +28,8 @@ class MainActivity : ComponentActivity() {
 
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
-    ) { permissions ->
-        // Permissions granted callback
+    ) { _ ->
+        // Permission result handled
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -39,7 +39,7 @@ class MainActivity : ComponentActivity() {
         checkAndRequestStoragePermissions()
 
         setContent {
-            UrduVideoRendererTheme {
+            UrduVideoRendererTheme(darkTheme = true) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = DarkBackground
