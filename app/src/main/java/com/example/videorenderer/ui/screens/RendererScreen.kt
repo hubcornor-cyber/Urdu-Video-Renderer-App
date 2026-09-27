@@ -1,5 +1,5 @@
 package com.example.videorenderer.ui.screens
-
+import androidx.compose.foundation.layout.height
 import android.graphics.Bitmap
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
