@@ -12,15 +12,9 @@ data class TimelineData(
     @SerializedName("settings")
     val settings: SettingsConfig = SettingsConfig()
 ) {
-    /**
-     * Computes the total duration in seconds based on the maximum scene end time.
-     */
     val totalDurationSec: Float
         get() = scenes.maxOfOrNull { it.end } ?: 0f
 
-    /**
-     * Finds the active scene for a given playback timestamp in seconds.
-     */
     fun findSceneAt(timeSec: Float): SceneItem? {
         if (scenes.isEmpty()) return null
         return scenes.firstOrNull { timeSec >= it.start && timeSec < it.end }
@@ -30,6 +24,7 @@ data class TimelineData(
 
 /**
  * Configuration for a single scene in the timeline.
+ * Supports individual per-scene custom character scaling.
  */
 data class SceneItem(
     @SerializedName("start")
@@ -60,7 +55,10 @@ data class SceneItem(
     val camera: CameraConfig = CameraConfig(),
 
     @SerializedName("characterTransform")
-    val characterTransform: CharacterTransformConfig = CharacterTransformConfig()
+    val characterTransform: CharacterTransformConfig = CharacterTransformConfig(),
+
+    @SerializedName("customScale")
+    val customScale: Float = 1.0f
 ) {
     val duration: Float
         get() = (end - start).coerceAtLeast(0.001f)

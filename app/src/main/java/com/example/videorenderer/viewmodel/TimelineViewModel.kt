@@ -5,6 +5,7 @@ import android.net.Uri
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.videorenderer.data.model.SceneItem
 import com.example.videorenderer.data.model.TimelineData
 import com.example.videorenderer.data.repository.TimelineRepository
 import com.example.videorenderer.export.VideoExportService
@@ -18,7 +19,8 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 /**
- * UI State holding timeline configuration, playback progress, character scale, and video export status.
+ * UI State holding timeline configuration, playback progress, per-scene character scaling,
+ * and exported video playback states.
  */
 data class TimelineUiState(
     val isLoading: Boolean = false,
@@ -30,15 +32,20 @@ data class TimelineUiState(
     val sceneCount: Int = 0,
     val currentPlaybackTime: Float = 0f,
     val isPlaying: Boolean = false,
-    val characterScaleMultiplier: Float = 1.0f, // Option to increase / decrease character size
+    val selectedSceneIndex: Int = 0,
+    val characterScaleMultiplier: Float = 1.0f,
     val isRendering: Boolean = false,
     val renderProgress: Float = 0f,
     val currentRenderFrame: Int = 0,
     val totalRenderFrames: Int = 0,
     val exportStatusMessage: String? = null,
     val exportedVideoUri: Uri? = null,
+    val isVideoPlayerOpen: Boolean = false,
     val errorMessage: String? = null
-)
+) {
+    val currentSelectedScene: SceneItem?
+        get() = timeline?.scenes?.getOrNull(selectedSceneIndex)
+}
 
 class TimelineViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -68,10 +75,11 @@ class TimelineViewModel(application: Application) : AndroidViewModel(application
                         it.copy(
                             isLoading = false,
                             timeline = data,
-                            jsonFileName = "sample_timeline.json (ڈیمو فائل)",
+                            jsonFileName = "sample_timeline.json (Demo)",
                             totalDurationSec = data.totalDurationSec,
                             sceneCount = data.scenes.size,
-                            currentPlaybackTime = 0f
+                            currentPlaybackTime = 0f,
+                            selectedSceneIndex = 0
                         )
                     }
                 },
@@ -79,7 +87,7 @@ class TimelineViewModel(application: Application) : AndroidViewModel(application
                     _uiState.update {
                         it.copy(
                             isLoading = false,
-                            errorMessage = "ڈیمو فائل لوڈ نہیں ہو سکی: ${error.localizedMessage}"
+                            errorMessage = "Failed to load demo timeline: ${error.localizedMessage}"
                         )
                     }
                 }
@@ -100,7 +108,8 @@ class TimelineViewModel(application: Application) : AndroidViewModel(application
                             jsonFileName = displayName,
                             totalDurationSec = data.totalDurationSec,
                             sceneCount = data.scenes.size,
-                            currentPlaybackTime = 0f
+                            currentPlaybackTime = 0f,
+                            selectedSceneIndex = 0
                         )
                     }
                 },
@@ -108,7 +117,7 @@ class TimelineViewModel(application: Application) : AndroidViewModel(application
                     _uiState.update {
                         it.copy(
                             isLoading = false,
-                            errorMessage = "JSON فائل کو پارس کرنے میں خرابی: ${error.localizedMessage}"
+                            errorMessage = "JSON parsing error: ${error.localizedMessage}"
                         )
                     }
                 }
@@ -126,24 +135,54 @@ class TimelineViewModel(application: Application) : AndroidViewModel(application
         repository.clearCache()
     }
 
-    // Character Scale controls (Increase / Decrease character size)
-    fun increaseCharacterScale() {
-        _uiState.update {
-            val newScale = (it.characterScaleMultiplier + 0.1f).coerceAtMost(3.0f)
-            it.copy(characterScaleMultiplier = Math.round(newScale * 10f) / 10f)
+    // Select Active Scene for editing
+    fun selectScene(index: Int) {
+        val total = _uiState.value.sceneCount
+        if (index in 0 until total) {
+            _uiState.update { it.copy(selectedSceneIndex = index) }
+            // Seek playback to scene start time
+            _uiState.value.timeline?.scenes?.getOrNull(index)?.let { scene ->
+                seekTo(scene.start)
+            }
         }
     }
 
-    fun decreaseCharacterScale() {
+    // PER-SCENE Scale Adjustment (har scene k liye alag image size change)
+    fun setScaleForScene(sceneIndex: Int, newScale: Float) {
+        val currentTimeline = _uiState.value.timeline ?: return
+        val clampedScale = (Math.round(newScale * 10f) / 10f).coerceIn(0.2f, 3.5f)
+
+        val updatedScenes = currentTimeline.scenes.mapIndexed { idx, scene ->
+            if (idx == sceneIndex) {
+                scene.copy(customScale = clampedScale)
+            } else {
+                scene
+            }
+        }
+
         _uiState.update {
-            val newScale = (it.characterScaleMultiplier - 0.1f).coerceAtLeast(0.3f)
-            it.copy(characterScaleMultiplier = Math.round(newScale * 10f) / 10f)
+            it.copy(timeline = currentTimeline.copy(scenes = updatedScenes))
         }
     }
 
-    fun setCharacterScale(scale: Float) {
+    fun increaseCurrentSceneScale() {
+        val activeIndex = _uiState.value.selectedSceneIndex
+        val currentScale = _uiState.value.timeline?.scenes?.getOrNull(activeIndex)?.customScale ?: 1.0f
+        setScaleForScene(activeIndex, currentScale + 0.1f)
+    }
+
+    fun decreaseCurrentSceneScale() {
+        val activeIndex = _uiState.value.selectedSceneIndex
+        val currentScale = _uiState.value.timeline?.scenes?.getOrNull(activeIndex)?.customScale ?: 1.0f
+        setScaleForScene(activeIndex, currentScale - 0.1f)
+    }
+
+    fun applyScaleToAllScenes(scale: Float) {
+        val currentTimeline = _uiState.value.timeline ?: return
+        val clampedScale = (Math.round(scale * 10f) / 10f).coerceIn(0.2f, 3.5f)
+        val updatedScenes = currentTimeline.scenes.map { it.copy(customScale = clampedScale) }
         _uiState.update {
-            it.copy(characterScaleMultiplier = scale.coerceIn(0.3f, 3.0f))
+            it.copy(timeline = currentTimeline.copy(scenes = updatedScenes))
         }
     }
 
@@ -173,7 +212,13 @@ class TimelineViewModel(application: Application) : AndroidViewModel(application
                     if (nextTime >= state.totalDurationSec) {
                         state.copy(currentPlaybackTime = 0f, isPlaying = true)
                     } else {
-                        state.copy(currentPlaybackTime = nextTime)
+                        // Also update selectedSceneIndex if scene boundary crossed
+                        val activeScene = state.timeline?.findSceneAt(nextTime)
+                        val activeIndex = state.timeline?.scenes?.indexOf(activeScene) ?: state.selectedSceneIndex
+                        state.copy(
+                            currentPlaybackTime = nextTime,
+                            selectedSceneIndex = if (activeIndex >= 0) activeIndex else state.selectedSceneIndex
+                        )
                     }
                 }
             }
@@ -187,7 +232,24 @@ class TimelineViewModel(application: Application) : AndroidViewModel(application
 
     fun seekTo(timeSec: Float) {
         val clamped = timeSec.coerceIn(0f, _uiState.value.totalDurationSec)
-        _uiState.update { it.copy(currentPlaybackTime = clamped) }
+        _uiState.update { state ->
+            val activeScene = state.timeline?.findSceneAt(clamped)
+            val activeIndex = state.timeline?.scenes?.indexOf(activeScene) ?: state.selectedSceneIndex
+            state.copy(
+                currentPlaybackTime = clamped,
+                selectedSceneIndex = if (activeIndex >= 0) activeIndex else state.selectedSceneIndex
+            )
+        }
+    }
+
+    fun openVideoPlayer() {
+        if (_uiState.value.exportedVideoUri != null) {
+            _uiState.update { it.copy(isVideoPlayerOpen = true) }
+        }
+    }
+
+    fun closeVideoPlayer() {
+        _uiState.update { it.copy(isVideoPlayerOpen = false) }
     }
 
     /**
@@ -196,7 +258,7 @@ class TimelineViewModel(application: Application) : AndroidViewModel(application
     fun exportMp4Video() {
         val timeline = _uiState.value.timeline
         if (timeline == null || timeline.scenes.isEmpty()) {
-            _uiState.update { it.copy(errorMessage = "براہ کرم پہلے ٹائم لائن JSON لوڈ کریں") }
+            _uiState.update { it.copy(errorMessage = "Please load a timeline JSON first.") }
             return
         }
 
@@ -211,16 +273,17 @@ class TimelineViewModel(application: Application) : AndroidViewModel(application
                     renderProgress = 0f,
                     currentRenderFrame = 0,
                     totalRenderFrames = totalFrames,
-                    exportStatusMessage = "ویڈیو رینڈر ہو رہی ہے...",
+                    exportStatusMessage = "Encoding video @ 30 FPS...",
                     errorMessage = null,
-                    exportedVideoUri = null
+                    exportedVideoUri = null,
+                    isVideoPlayerOpen = false
                 )
             }
 
             val result = exportService.exportVideo(
                 timeline = timeline,
                 assetsTreeUri = _uiState.value.assetsTreeUri,
-                characterScaleMultiplier = _uiState.value.characterScaleMultiplier,
+                characterScaleMultiplier = 1.0f,
                 onProgress = { progress, currentFrame, total ->
                     _uiState.update {
                         it.copy(
@@ -239,8 +302,9 @@ class TimelineViewModel(application: Application) : AndroidViewModel(application
                             isRendering = false,
                             renderProgress = 1.0f,
                             currentRenderFrame = totalFrames,
-                            exportStatusMessage = "ویڈیو کامیابی سے برآمد ہو گئی! (Downloads/rendered_video.mp4)",
-                            exportedVideoUri = uri
+                            exportStatusMessage = "Export complete! Saved to Downloads.",
+                            exportedVideoUri = uri,
+                            isVideoPlayerOpen = true // Automatically open player so user can watch immediately!
                         )
                     }
                 },
@@ -249,7 +313,7 @@ class TimelineViewModel(application: Application) : AndroidViewModel(application
                     _uiState.update {
                         it.copy(
                             isRendering = false,
-                            errorMessage = "برآمد کرنے میں خرابی: ${error.localizedMessage}"
+                            errorMessage = "Export error: ${error.localizedMessage}"
                         )
                     }
                 }

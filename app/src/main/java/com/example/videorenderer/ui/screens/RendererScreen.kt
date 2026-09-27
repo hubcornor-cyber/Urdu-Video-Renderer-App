@@ -4,21 +4,21 @@ import android.graphics.Bitmap
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -60,11 +60,8 @@ import com.example.videorenderer.renderer.TimelineCanvasRenderer
 import com.example.videorenderer.renderer.TimelineMath
 import com.example.videorenderer.ui.theme.AmberAccent
 import com.example.videorenderer.ui.theme.DarkBorder
-import com.example.videorenderer.ui.theme.DarkCard
 import com.example.videorenderer.ui.theme.EmeraldPrimary
 import com.example.videorenderer.ui.theme.TextMuted
-import com.example.videorenderer.ui.theme.TextPrimary
-import com.example.videorenderer.ui.theme.TextSecondary
 import com.example.videorenderer.viewmodel.TimelineViewModel
 
 @Composable
@@ -107,14 +104,14 @@ fun RendererScreen(
     Surface(
         modifier = modifier
             .fillMaxSize()
-            .safeDrawingPadding(), // Ensures screen top & bottom content never go off-screen
+            .safeDrawingPadding(),
         color = MaterialTheme.colorScheme.background
     ) {
         Column(
             modifier = Modifier.fillMaxSize(),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // TOP BAR (Compact, within safe area)
+            // TOP BAR
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -125,20 +122,21 @@ fun RendererScreen(
                 IconButton(onClick = onNavigateBack) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "واپس (Back)",
+                        contentDescription = "Back",
                         tint = MaterialTheme.colorScheme.onBackground
                     )
                 }
 
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
-                        text = "پیش نظارہ کینوس (30 FPS)",
-                        fontSize = 15.sp,
+                        text = "Canvas Preview (30 FPS)",
+                        fontSize = 14.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onBackground
                     )
+                    val activeScene = uiState.currentSelectedScene
                     Text(
-                        text = "${timeline?.settings?.resolution ?: "1080x1920"} • سائز: ${String.format("%.1f", uiState.characterScaleMultiplier)}x",
+                        text = "Scene ${uiState.selectedSceneIndex + 1} • Size: ${String.format("%.1f", activeScene?.customScale ?: 1.0f)}x",
                         fontSize = 10.sp,
                         color = EmeraldPrimary
                     )
@@ -151,7 +149,7 @@ fun RendererScreen(
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary),
                     shape = RoundedCornerShape(8.dp),
-                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 4.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Default.Videocam,
@@ -161,26 +159,25 @@ fun RendererScreen(
                     )
                     Spacer(modifier = Modifier.width(3.dp))
                     Text(
-                        text = "برآمد",
-                        fontSize = 11.sp,
+                        text = "Export",
+                        fontSize = 12.sp,
                         color = Color(0xFF022C22),
                         fontWeight = FontWeight.Bold
                     )
                 }
             }
 
-            // RESPONSIVE CANVAS CONTAINER (Fits inside remaining height without pushing menu off-screen)
+            // RESPONSIVE CANVAS CONTAINER (Fits on screen without clipping)
             BoxWithConstraints(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 4.dp),
+                    .padding(horizontal = 12.dp, vertical = 2.dp),
                 contentAlignment = Alignment.Center
             ) {
                 val availableWidth = maxWidth
                 val availableHeight = maxHeight
 
-                // Calculate optimal 9:16 aspect ratio box that fits within bounds
                 val targetAspect = 9f / 16f
                 val boxWidth = minOf(availableWidth, availableHeight * targetAspect)
                 val boxHeight = boxWidth / targetAspect
@@ -213,7 +210,7 @@ fun RendererScreen(
                                     state = frameState,
                                     bgBitmap = bgBmp,
                                     charBitmap = charBmp,
-                                    characterScaleMultiplier = uiState.characterScaleMultiplier,
+                                    characterScaleMultiplier = 1.0f,
                                     showHud = true
                                 )
                             }
@@ -221,7 +218,7 @@ fun RendererScreen(
                     } else {
                         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                             Text(
-                                text = "کوئی منظر دستیاب نہیں",
+                                text = "No Scenes Available",
                                 color = TextMuted,
                                 fontSize = 14.sp
                             )
@@ -230,66 +227,104 @@ fun RendererScreen(
                 }
             }
 
-            // CHARACTER SCALE QUICK BAR (Live size adjustment while watching)
-            Row(
+            // PER-SCENE CHIPS & SCALE CONTROLS (Live adjustment during playback)
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 2.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
+                    .padding(horizontal = 12.dp, vertical = 4.dp)
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Default.Person,
-                        contentDescription = null,
-                        tint = AmberAccent,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = "کردار: ${String.format("%.1f", uiState.characterScaleMultiplier)}x",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onBackground
-                    )
+                val scenes = uiState.timeline?.scenes ?: emptyList()
+                if (scenes.isNotEmpty()) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        scenes.forEachIndexed { index, scene ->
+                            val isSelected = index == uiState.selectedSceneIndex
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(if (isSelected) EmeraldPrimary else MaterialTheme.colorScheme.surface)
+                                    .border(1.dp, if (isSelected) EmeraldPrimary else DarkBorder, RoundedCornerShape(6.dp))
+                                    .clickable { viewModel.selectScene(index) }
+                                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                            ) {
+                                Text(
+                                    text = "S${index + 1}: ${String.format("%.1f", scene.customScale)}x",
+                                    fontSize = 10.sp,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                    color = if (isSelected) Color(0xFF022C22) else MaterialTheme.colorScheme.onBackground
+                                )
+                            }
+                        }
+                    }
                 }
 
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(
-                        onClick = { viewModel.decreaseCharacterScale() },
-                        modifier = Modifier
-                            .size(28.dp)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.surface)
-                    ) {
+                Spacer(modifier = Modifier.height(4.dp))
+
+                // Scale +/- for active scene
+                val activeScene = uiState.currentSelectedScene
+                val activeScale = activeScene?.customScale ?: 1.0f
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
-                            imageVector = Icons.Default.Remove,
-                            contentDescription = "چھوٹا",
-                            tint = MaterialTheme.colorScheme.onBackground,
-                            modifier = Modifier.size(14.dp)
+                            imageVector = Icons.Default.Person,
+                            contentDescription = null,
+                            tint = AmberAccent,
+                            modifier = Modifier.size(15.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "Scene ${uiState.selectedSceneIndex + 1} Size: ${String.format("%.1f", activeScale)}x",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onBackground
                         )
                     }
 
-                    Spacer(modifier = Modifier.width(8.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(
+                            onClick = { viewModel.decreaseCurrentSceneScale() },
+                            modifier = Modifier
+                                .size(28.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.surface)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Remove,
+                                contentDescription = "Decrease",
+                                tint = MaterialTheme.colorScheme.onBackground,
+                                modifier = Modifier.size(14.dp)
+                            )
+                        }
 
-                    IconButton(
-                        onClick = { viewModel.increaseCharacterScale() },
-                        modifier = Modifier
-                            .size(28.dp)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.surface)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Add,
-                            contentDescription = "بڑا",
-                            tint = MaterialTheme.colorScheme.onBackground,
-                            modifier = Modifier.size(14.dp)
-                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+
+                        IconButton(
+                            onClick = { viewModel.increaseCurrentSceneScale() },
+                            modifier = Modifier
+                                .size(28.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.surface)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Add,
+                                contentDescription = "Increase",
+                                tint = MaterialTheme.colorScheme.onBackground,
+                                modifier = Modifier.size(14.dp)
+                            )
+                        }
                     }
                 }
             }
 
-            // BOTTOM PLAYBACK CONTROLS PANEL (Guaranteed to stay on screen)
+            // BOTTOM PLAYBACK CONTROLS
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -298,10 +333,9 @@ fun RendererScreen(
                 shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
             ) {
                 Column(
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    // Time and Scene indicator
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -312,7 +346,7 @@ fun RendererScreen(
                         val activeScene = timeline?.findSceneAt(curSec)
 
                         Text(
-                            text = activeScene?.label ?: "منظر نامہ",
+                            text = activeScene?.label ?: "Scene",
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Medium,
                             color = EmeraldPrimary,
@@ -324,20 +358,19 @@ fun RendererScreen(
                                 (curSec / 60).toInt(), (curSec % 60).toInt(),
                                 (totSec / 60).toInt(), (totSec % 60).toInt()
                             ),
-                            fontSize = 12.sp,
+                            fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
 
-                    // Scrubber Slider
                     Slider(
                         value = uiState.currentPlaybackTime,
                         onValueChange = { newTime -> viewModel.seekTo(newTime) },
                         valueRange = 0f..uiState.totalDurationSec.coerceAtLeast(0.1f),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(28.dp),
+                            .height(26.dp),
                         colors = SliderDefaults.colors(
                             thumbColor = EmeraldPrimary,
                             activeTrackColor = EmeraldPrimary,
@@ -345,7 +378,6 @@ fun RendererScreen(
                         )
                     )
 
-                    // Control Buttons (Replay, Play/Pause)
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.Center,
@@ -354,15 +386,15 @@ fun RendererScreen(
                         IconButton(
                             onClick = { viewModel.seekTo(0f) },
                             modifier = Modifier
-                                .size(36.dp)
+                                .size(34.dp)
                                 .clip(CircleShape)
                                 .background(MaterialTheme.colorScheme.background)
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Replay,
-                                contentDescription = "دوبارہ چلائیں (Replay)",
+                                contentDescription = "Replay",
                                 tint = MaterialTheme.colorScheme.onBackground,
-                                modifier = Modifier.size(18.dp)
+                                modifier = Modifier.size(16.dp)
                             )
                         }
 
@@ -371,15 +403,15 @@ fun RendererScreen(
                         IconButton(
                             onClick = { viewModel.togglePlayback() },
                             modifier = Modifier
-                                .size(46.dp)
+                                .size(44.dp)
                                 .clip(CircleShape)
                                 .background(EmeraldPrimary)
                         ) {
                             Icon(
                                 imageVector = if (uiState.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                                contentDescription = if (uiState.isPlaying) "روکیں (Pause)" else "چلائیں (Play)",
+                                contentDescription = if (uiState.isPlaying) "Pause" else "Play",
                                 tint = Color(0xFF022C22),
-                                modifier = Modifier.size(26.dp)
+                                modifier = Modifier.size(24.dp)
                             )
                         }
                     }

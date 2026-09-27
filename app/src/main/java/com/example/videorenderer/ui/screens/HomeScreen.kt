@@ -7,6 +7,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -26,13 +28,14 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Description
-import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Movie
-import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.UploadFile
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
@@ -63,12 +66,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.videorenderer.ui.theme.AmberAccent
 import com.example.videorenderer.ui.theme.DarkBorder
-import com.example.videorenderer.ui.theme.DarkCard
 import com.example.videorenderer.ui.theme.EmeraldPrimary
 import com.example.videorenderer.ui.theme.RoseError
 import com.example.videorenderer.ui.theme.TextMuted
-import com.example.videorenderer.ui.theme.TextPrimary
-import com.example.videorenderer.ui.theme.TextSecondary
 import com.example.videorenderer.viewmodel.TimelineViewModel
 
 @Composable
@@ -106,198 +106,174 @@ fun HomeScreen(
         }
     }
 
+    // In-App Video Player Dialog when export finishes or user taps Play Video
+    if (uiState.isVideoPlayerOpen && uiState.exportedVideoUri != null) {
+        VideoPlayerDialog(
+            videoUri = uiState.exportedVideoUri!!,
+            onDismiss = { viewModel.closeVideoPlayer() }
+        )
+    }
+
     Surface(
         modifier = modifier
             .fillMaxSize()
-            .safeDrawingPadding(), // Guarantees UI stays completely within screen & insets
+            .safeDrawingPadding(),
         color = MaterialTheme.colorScheme.background
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp, vertical = 14.dp),
+                .padding(horizontal = 16.dp, vertical = 12.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Header with App Icon & Title
+            // TOP HEADER
             Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center,
-                modifier = Modifier.padding(bottom = 4.dp)
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Box(
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(38.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(EmeraldPrimary.copy(alpha = 0.15f))
+                            .border(1.dp, EmeraldPrimary.copy(alpha = 0.4f), RoundedCornerShape(10.dp)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Movie,
+                            contentDescription = null,
+                            tint = EmeraldPrimary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column {
+                        Text(
+                            text = "Video Renderer",
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onBackground
+                        )
+                        Text(
+                            text = "${uiState.sceneCount} Scenes • ${String.format("%.1f", uiState.totalDurationSec)}s Total",
+                            fontSize = 11.sp,
+                            color = EmeraldPrimary
+                        )
+                    }
+                }
+
+                IconButton(
+                    onClick = { viewModel.loadSampleTimeline() },
                     modifier = Modifier
-                        .size(40.dp)
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(EmeraldPrimary.copy(alpha = 0.2f))
-                        .border(1.dp, EmeraldPrimary.copy(alpha = 0.4f), RoundedCornerShape(10.dp)),
-                    contentAlignment = Alignment.Center
+                        .size(34.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.surface)
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Movie,
-                        contentDescription = "Renderer Logo",
-                        tint = EmeraldPrimary,
-                        modifier = Modifier.size(22.dp)
-                    )
-                }
-                Spacer(modifier = Modifier.width(10.dp))
-                Column {
-                    Text(
-                        text = "ویڈیو رینڈرنگ سسٹم",
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onBackground
-                    )
-                    Text(
-                        text = "Native Android Jetpack Compose Video Engine",
-                        fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        imageVector = Icons.Default.Refresh,
+                        contentDescription = "Reload Demo",
+                        tint = MaterialTheme.colorScheme.onBackground,
+                        modifier = Modifier.size(16.dp)
                     )
                 }
             }
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            // STATUS & FILE BADGES CARD
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .border(1.dp, DarkBorder, RoundedCornerShape(14.dp)),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                shape = RoundedCornerShape(14.dp)
+            // SIMPLE CLEAN BUTTONS IN ENGLISH (FONT AWESOME STYLE ICONS)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Column(modifier = Modifier.padding(14.dp)) {
+                // Upload JSON Button
+                Button(
+                    onClick = { jsonPickerLauncher.launch("application/json") },
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(46.dp),
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surface)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.UploadFile,
+                        contentDescription = null,
+                        tint = EmeraldPrimary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = "فعال فائلز کی تفصیلات (Active Configuration)",
+                        text = "Upload JSON",
                         fontSize = 13.sp,
                         fontWeight = FontWeight.SemiBold,
-                        color = EmeraldPrimary
+                        color = MaterialTheme.colorScheme.onBackground
                     )
-                    Spacer(modifier = Modifier.height(8.dp))
+                }
 
-                    // JSON file status
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Description,
-                            contentDescription = null,
-                            tint = if (uiState.timeline != null) EmeraldPrimary else TextMuted,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "JSON فائل:",
-                                fontSize = 11.sp,
-                                color = TextMuted
-                            )
-                            Text(
-                                text = uiState.jsonFileName ?: "کوئی فائل منتخب نہیں",
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = MaterialTheme.colorScheme.onBackground
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    // Assets folder status
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Folder,
-                            contentDescription = null,
-                            tint = if (uiState.assetsTreeUri != null) AmberAccent else TextMuted,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "اثاثہ جات فولڈر (Assets):",
-                                fontSize = 11.sp,
-                                color = TextMuted
-                            )
-                            Text(
-                                text = uiState.assetsFolderName ?: "ڈیفالٹ ایپ اثاثہ جات (assets/)",
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = MaterialTheme.colorScheme.onBackground
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    // Duration and Scenes Counter Badges
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(MaterialTheme.colorScheme.background)
-                                .border(1.dp, DarkBorder, RoundedCornerShape(8.dp))
-                                .padding(vertical = 8.dp, horizontal = 10.dp)
-                        ) {
-                            Column {
-                                Text(
-                                    text = "کل دورانیہ (Duration)",
-                                    fontSize = 10.sp,
-                                    color = TextMuted
-                                )
-                                Text(
-                                    text = "${String.format("%.1f", uiState.totalDurationSec)} سیکنڈ",
-                                    fontSize = 16.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = EmeraldPrimary
-                                )
-                            }
-                        }
-
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(MaterialTheme.colorScheme.background)
-                                .border(1.dp, DarkBorder, RoundedCornerShape(8.dp))
-                                .padding(vertical = 8.dp, horizontal = 10.dp)
-                        ) {
-                            Column {
-                                Text(
-                                    text = "مناظر کی تعداد (Scenes)",
-                                    fontSize = 10.sp,
-                                    color = TextMuted
-                                )
-                                Text(
-                                    text = "${uiState.sceneCount} مناظر",
-                                    fontSize = 16.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = AmberAccent
-                                )
-                            }
-                        }
-                    }
+                // Select Assets Button
+                Button(
+                    onClick = { assetsFolderPickerLauncher.launch(null) },
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(46.dp),
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surface)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.FolderOpen,
+                        contentDescription = null,
+                        tint = AmberAccent,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "Select Assets",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onBackground
+                    )
                 }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            // Minimal Filename Badge
+            if (uiState.jsonFileName != null || uiState.assetsFolderName != null) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 6.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = "JSON: ${uiState.jsonFileName ?: "Default"}",
+                        fontSize = 10.sp,
+                        color = TextMuted,
+                        maxLines = 1,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+                    Text(
+                        text = "Assets: ${uiState.assetsFolderName ?: "Default"}",
+                        fontSize = 10.sp,
+                        color = TextMuted,
+                        maxLines = 1
+                    )
+                }
+            }
 
-            // CHARACTER SCALE ADJUSTMENT CARD (INCREASE / DECREASE OPTION)
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // PER-SCENE CHARACTER SIZE ADJUSTMENT (HAR SCENE K LIYE ALAG SIZE)
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .border(1.dp, EmeraldPrimary.copy(alpha = 0.3f), RoundedCornerShape(14.dp)),
+                    .border(1.dp, DarkBorder, RoundedCornerShape(12.dp)),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                shape = RoundedCornerShape(14.dp)
+                shape = RoundedCornerShape(12.dp)
             ) {
-                Column(modifier = Modifier.padding(14.dp)) {
+                Column(modifier = Modifier.padding(12.dp)) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -305,29 +281,30 @@ fun HomeScreen(
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
-                                imageVector = Icons.Default.Person,
+                                imageVector = Icons.Default.Tune,
                                 contentDescription = null,
-                                tint = AmberAccent,
-                                modifier = Modifier.size(18.dp)
+                                tint = EmeraldPrimary,
+                                modifier = Modifier.size(16.dp)
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = "کردار کا سائز (Character Size)",
+                                text = "Per-Scene Character Scale",
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onBackground
                             )
                         }
 
-                        // Current scale pill
+                        // Active Scene Custom Scale Pill
+                        val activeScale = uiState.currentSelectedScene?.customScale ?: 1.0f
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(6.dp))
                                 .background(EmeraldPrimary.copy(alpha = 0.15f))
-                                .padding(horizontal = 8.dp, vertical = 3.dp)
+                                .padding(horizontal = 8.dp, vertical = 2.dp)
                         ) {
                             Text(
-                                text = "${String.format("%.1f", uiState.characterScaleMultiplier)}x",
+                                text = "${String.format("%.1f", activeScale)}x",
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = EmeraldPrimary
@@ -337,35 +314,72 @@ fun HomeScreen(
 
                     Spacer(modifier = Modifier.height(8.dp))
 
-                    // Buttons + Slider
+                    // Horizontal Scene Selector Tabs
+                    val scenes = uiState.timeline?.scenes ?: emptyList()
+                    if (scenes.isNotEmpty()) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            scenes.forEachIndexed { index, scene ->
+                                val isSelected = index == uiState.selectedSceneIndex
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(if (isSelected) EmeraldPrimary else MaterialTheme.colorScheme.background)
+                                        .border(
+                                            1.dp,
+                                            if (isSelected) EmeraldPrimary else DarkBorder,
+                                            RoundedCornerShape(8.dp)
+                                        )
+                                        .clickable { viewModel.selectScene(index) }
+                                        .padding(horizontal = 10.dp, vertical = 6.dp)
+                                ) {
+                                    Text(
+                                        text = "Scene ${index + 1} (${String.format("%.1f", scene.customScale)}x)",
+                                        fontSize = 11.sp,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                        color = if (isSelected) Color(0xFF022C22) else MaterialTheme.colorScheme.onBackground
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // Controls for the selected scene
+                    val activeScale = uiState.currentSelectedScene?.customScale ?: 1.0f
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        // Decrease (-) button
+                        // Decrease (-)
                         IconButton(
-                            onClick = { viewModel.decreaseCharacterScale() },
+                            onClick = { viewModel.decreaseCurrentSceneScale() },
                             modifier = Modifier
-                                .size(36.dp)
+                                .size(34.dp)
                                 .clip(CircleShape)
                                 .background(MaterialTheme.colorScheme.background)
                                 .border(1.dp, DarkBorder, CircleShape)
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Remove,
-                                contentDescription = "چھوٹا کریں",
+                                contentDescription = "Decrease",
                                 tint = MaterialTheme.colorScheme.onBackground,
-                                modifier = Modifier.size(18.dp)
+                                modifier = Modifier.size(16.dp)
                             )
                         }
 
-                        // Slider
+                        // Slider for selected scene
                         Slider(
-                            value = uiState.characterScaleMultiplier,
-                            onValueChange = { viewModel.setCharacterScale(it) },
-                            valueRange = 0.4f..2.5f,
-                            steps = 20,
+                            value = activeScale,
+                            onValueChange = { viewModel.setScaleForScene(uiState.selectedSceneIndex, it) },
+                            valueRange = 0.3f..2.5f,
+                            steps = 22,
                             modifier = Modifier.weight(1f),
                             colors = SliderDefaults.colors(
                                 thumbColor = EmeraldPrimary,
@@ -374,124 +388,62 @@ fun HomeScreen(
                             )
                         )
 
-                        // Increase (+) button
+                        // Increase (+)
                         IconButton(
-                            onClick = { viewModel.increaseCharacterScale() },
+                            onClick = { viewModel.increaseCurrentSceneScale() },
                             modifier = Modifier
-                                .size(36.dp)
+                                .size(34.dp)
                                 .clip(CircleShape)
                                 .background(MaterialTheme.colorScheme.background)
                                 .border(1.dp, DarkBorder, CircleShape)
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Add,
-                                contentDescription = "بڑا کریں",
+                                contentDescription = "Increase",
                                 tint = MaterialTheme.colorScheme.onBackground,
-                                modifier = Modifier.size(18.dp)
+                                modifier = Modifier.size(16.dp)
                             )
                         }
                     }
 
-                    Text(
-                        text = "کردار کو بڑا یا چھوٹا کرنے کے لیے سلائیڈر یا بٹن استعمال کریں",
-                        fontSize = 10.sp,
-                        color = TextMuted,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Editing: Scene ${uiState.selectedSceneIndex + 1}",
+                            fontSize = 10.sp,
+                            color = TextMuted
+                        )
+
+                        Text(
+                            text = "Apply to All",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = AmberAccent,
+                            modifier = Modifier
+                                .clickable { viewModel.applyScaleToAllScenes(activeScale) }
+                                .padding(4.dp)
+                        )
+                    }
                 }
             }
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            // PICKER ACTION BUTTONS
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                // 1. Load JSON Button
-                Button(
-                    onClick = { jsonPickerLauncher.launch("application/json") },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(48.dp),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surface)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Description,
-                        contentDescription = null,
-                        tint = EmeraldPrimary,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "جے ایس او این لوڈ کریں (Load JSON)",
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onBackground
-                    )
-                }
-
-                // 2. Select Assets Folder Button
-                Button(
-                    onClick = { assetsFolderPickerLauncher.launch(null) },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(48.dp),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surface)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Folder,
-                        contentDescription = null,
-                        tint = AmberAccent,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "اثاثہ جات فولڈر منتخب کریں (Select Assets)",
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onBackground
-                    )
-                }
-
-                // Reset to Demo JSON Button
-                OutlinedButton(
-                    onClick = { viewModel.loadSampleTimeline() },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(42.dp),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Refresh,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = "ڈیمو ٹائم لائن بحال کریں (Reload Demo)",
-                        fontSize = 12.sp
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(14.dp))
-
-            // RENDERING PROGRESS BAR & STATUS
+            // RENDERING PROGRESS BAR
             AnimatedVisibility(visible = uiState.isRendering) {
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(bottom = 12.dp)
-                        .border(1.dp, EmeraldPrimary.copy(alpha = 0.5f), RoundedCornerShape(14.dp)),
+                        .border(1.dp, EmeraldPrimary.copy(alpha = 0.5f), RoundedCornerShape(12.dp)),
                     colors = CardDefaults.cardColors(containerColor = Color(0xFF064E3B).copy(alpha = 0.5f)),
-                    shape = RoundedCornerShape(14.dp)
+                    shape = RoundedCornerShape(12.dp)
                 ) {
                     Column(
-                        modifier = Modifier.padding(14.dp),
+                        modifier = Modifier.padding(12.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Row(
@@ -500,7 +452,7 @@ fun HomeScreen(
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Text(
-                                text = "ویڈیو رینڈر ہو رہی ہے...",
+                                text = "Rendering MP4 @ 30 FPS...",
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = EmeraldPrimary
@@ -525,10 +477,10 @@ fun HomeScreen(
                             trackColor = Color(0xFF1E293B)
                         )
 
-                        Spacer(modifier = Modifier.height(6.dp))
+                        Spacer(modifier = Modifier.height(4.dp))
 
                         Text(
-                            text = "فریم: ${uiState.currentRenderFrame} / ${uiState.totalRenderFrames} (MediaCodec @ 30 FPS)",
+                            text = "Frame ${uiState.currentRenderFrame} / ${uiState.totalRenderFrames}",
                             fontSize = 11.sp,
                             color = Color.White.copy(alpha = 0.8f)
                         )
@@ -536,8 +488,8 @@ fun HomeScreen(
                 }
             }
 
-            // SUCCESS EXPORT MESSAGE
-            AnimatedVisibility(visible = uiState.exportStatusMessage != null && !uiState.isRendering) {
+            // SUCCESS EXPORT BANNER WITH INSTANT PLAY BUTTON
+            AnimatedVisibility(visible = uiState.exportedVideoUri != null && !uiState.isRendering) {
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -547,44 +499,81 @@ fun HomeScreen(
                     shape = RoundedCornerShape(12.dp)
                 ) {
                     Row(
-                        modifier = Modifier.padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.CheckCircle,
-                            contentDescription = null,
-                            tint = EmeraldPrimary,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = uiState.exportStatusMessage ?: "",
-                            fontSize = 12.sp,
-                            color = Color.White
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.CheckCircle,
+                                contentDescription = null,
+                                tint = EmeraldPrimary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column {
+                                Text(
+                                    text = "Video Rendered!",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White
+                                )
+                                Text(
+                                    text = "Saved in Downloads/rendered_video.mp4",
+                                    fontSize = 10.sp,
+                                    color = Color.White.copy(alpha = 0.8f)
+                                )
+                            }
+                        }
+
+                        Button(
+                            onClick = { viewModel.openVideoPlayer() },
+                            colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary),
+                            shape = RoundedCornerShape(8.dp),
+                            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.PlayArrow,
+                                contentDescription = null,
+                                tint = Color(0xFF022C22),
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "Play",
+                                fontSize = 12.sp,
+                                color = Color(0xFF022C22),
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
                     }
                 }
             }
 
-            // ERROR MESSAGE
+            // ERROR BANNER
             AnimatedVisibility(visible = uiState.errorMessage != null) {
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(bottom = 12.dp)
-                        .border(1.dp, RoseError, RoundedCornerShape(12.dp)),
+                        .padding(bottom = 10.dp)
+                        .border(1.dp, RoseError, RoundedCornerShape(10.dp)),
                     colors = CardDefaults.cardColors(containerColor = Color(0xFF450A0A)),
-                    shape = RoundedCornerShape(12.dp)
+                    shape = RoundedCornerShape(10.dp)
                 ) {
                     Row(
-                        modifier = Modifier.padding(12.dp),
+                        modifier = Modifier.padding(10.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
                             imageVector = Icons.Default.Warning,
                             contentDescription = null,
                             tint = RoseError,
-                            modifier = Modifier.size(20.dp)
+                            modifier = Modifier.size(18.dp)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
@@ -596,44 +585,70 @@ fun HomeScreen(
                 }
             }
 
-            // PRIMARY ACTION BUTTONS: PREVIEW & EXPORT
+            // PRIMARY ACTION BUTTONS
             Column(
                 modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                // If video already rendered, show prominent Play Video button
+                if (uiState.exportedVideoUri != null) {
+                    Button(
+                        onClick = { viewModel.openVideoPlayer() },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp),
+                        shape = RoundedCornerShape(10.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981))
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.PlayCircle,
+                            contentDescription = null,
+                            tint = Color(0xFF022C22),
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Play Exported Video",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF022C22)
+                        )
+                    }
+                }
+
                 // Preview Button
                 Button(
                     onClick = onNavigateToPreview,
                     enabled = (uiState.timeline != null && !uiState.isRendering),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(50.dp),
-                    shape = RoundedCornerShape(12.dp),
+                        .height(46.dp),
+                    shape = RoundedCornerShape(10.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0284C7))
                 ) {
                     Icon(
                         imageVector = Icons.Default.PlayArrow,
                         contentDescription = null,
                         tint = Color.White,
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(18.dp)
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "پیش نظارہ (Preview Timeline)",
-                        fontSize = 15.sp,
+                        text = "Preview Timeline",
+                        fontSize = 14.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color.White
                     )
                 }
 
-                // Render & Export MP4 Button
+                // Render Video Button
                 Button(
                     onClick = { viewModel.exportMp4Video() },
                     enabled = (uiState.timeline != null && !uiState.isRendering),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(50.dp),
-                    shape = RoundedCornerShape(12.dp),
+                        .height(46.dp),
+                    shape = RoundedCornerShape(10.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary)
                 ) {
                     if (uiState.isRendering) {
@@ -644,8 +659,8 @@ fun HomeScreen(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "ویڈیو رینڈر ہو رہی ہے...",
-                            fontSize = 15.sp,
+                            text = "Rendering Video...",
+                            fontSize = 14.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color.White
                         )
@@ -654,11 +669,11 @@ fun HomeScreen(
                             imageVector = Icons.Default.Videocam,
                             contentDescription = null,
                             tint = Color(0xFF022C22),
-                            modifier = Modifier.size(20.dp)
+                            modifier = Modifier.size(18.dp)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "ویڈیو رینڈر اور برآمد کریں (Render & Export)",
+                            text = "Render Video",
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color(0xFF022C22)
@@ -667,7 +682,7 @@ fun HomeScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(14.dp))
         }
     }
 }
