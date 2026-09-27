@@ -66,7 +66,7 @@ import com.example.videorenderer.ui.theme.DarkBorder
 import com.example.videorenderer.ui.theme.EmeraldPrimary
 import com.example.videorenderer.ui.theme.TextMuted
 import com.example.videorenderer.viewmodel.TimelineViewModel
-
+ 
 @Composable
 fun RendererScreen(
     viewModel: TimelineViewModel,
