@@ -13,12 +13,6 @@ import android.graphics.Typeface
 import com.example.videorenderer.data.model.SceneItem
 import kotlin.math.max
 
-/**
- * Resolution-Normalized Android Canvas Renderer.
- * Ensures 100% pixel-perfect scaling parity between screen preview (e.g. 540x960)
- * and final exported video (1080x1920), fixing the issue where characters appear
- * smaller in export than in the preview.
- */
 class TimelineCanvasRenderer {
 
     companion object {
@@ -28,9 +22,7 @@ class TimelineCanvasRenderer {
     private val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
     private val charPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
     private val placeholderPaint = Paint(Paint.ANTI_ALIAS_FLAG)
-    private val captionBgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.argb(200, 15, 23, 42)
-    }
+    private val captionBgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.argb(200, 15, 23, 42) }
     private val captionStrokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
         strokeWidth = 3f
@@ -56,9 +48,7 @@ class TimelineCanvasRenderer {
         typeface = Typeface.MONOSPACE
         setShadowLayer(4f, 0f, 2f, Color.BLACK)
     }
-    private val hudBgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.argb(170, 2, 6, 23)
-    }
+    private val hudBgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.argb(170, 2, 6, 23) }
 
     private val matrix = Matrix()
     private val srcRect = Rect()
@@ -76,6 +66,8 @@ class TimelineCanvasRenderer {
         characterScaleMultiplier: Float = 1.0f,
         showHud: Boolean = true
     ) {
+        if (width <= 0 || height <= 0) return
+
         val scene = state.scene
 
         // 1. Draw Background
@@ -85,7 +77,7 @@ class TimelineCanvasRenderer {
             drawMissingBackgroundFallback(canvas, width, height, scene)
         }
 
-        // 2. Draw Character (Resolution normalized so preview & export match identically)
+        // 2. Draw Character
         if (charBitmap != null && !charBitmap.isRecycled) {
             drawCharacterWithTransform(canvas, width, height, charBitmap, state, characterScaleMultiplier)
         } else if (scene.character.isNotBlank()) {
@@ -112,8 +104,9 @@ class TimelineCanvasRenderer {
     ) {
         val bw = bitmap.width.toFloat()
         val bh = bitmap.height.toFloat()
-        val zoom = max(1.0f, state.cameraZoom)
+        if (bw <= 0 || bh <= 0) return
 
+        val zoom = max(1.0f, state.cameraZoom)
         val targetAspect = width.toFloat() / height.toFloat()
         val bmpAspect = bw / bh
 
@@ -131,15 +124,20 @@ class TimelineCanvasRenderer {
         val halfW = visibleWidth / 2f
         val halfH = visibleHeight / 2f
 
-        val centerX = (state.cameraX * bw).coerceIn(halfW, bw - halfW)
-        val centerY = (state.cameraY * bh).coerceIn(halfH, bh - halfH)
+        val minX = halfW
+        val maxX = max(minX, bw - halfW)
+        val minY = halfH
+        val maxY = max(minY, bh - halfH)
 
-        srcRect.set(
-            (centerX - halfW).toInt(),
-            (centerY - halfH).toInt(),
-            (centerX + halfW).toInt(),
-            (centerY + halfH).toInt()
-        )
+        val centerX = if (minX >= maxX) bw / 2f else (state.cameraX * bw).coerceIn(minX, maxX)
+        val centerY = if (minY >= maxY) bh / 2f else (state.cameraY * bh).coerceIn(minY, maxY)
+
+        val left = (centerX - halfW).toInt().coerceIn(0, max(0, bw.toInt() - 1))
+        val top = (centerY - halfH).toInt().coerceIn(0, max(0, bh.toInt() - 1))
+        val right = (centerX + halfW).toInt().coerceIn(left + 1, bw.toInt())
+        val bottom = (centerY + halfH).toInt().coerceIn(top + 1, bh.toInt())
+
+        srcRect.set(left, top, right, bottom)
         dstRect.set(0f, 0f, width.toFloat(), height.toFloat())
 
         canvas.drawBitmap(bitmap, srcRect, dstRect, bgPaint)
@@ -163,17 +161,12 @@ class TimelineCanvasRenderer {
         val resFactor = height.toFloat() / BASE_CANVAS_HEIGHT
         val notePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.argb(140, 255, 255, 255)
-            textSize = 42f * resFactor
+            textSize = max(24f, 42f * resFactor)
             textAlign = Paint.Align.CENTER
         }
-        canvas.drawText("Missing asset: ${scene.background}", width / 2f, height / 2f, notePaint)
+        canvas.drawText("Background: ${scene.background}", width / 2f, height / 2f, notePaint)
     }
 
-    /**
-     * Draws character sprite with normalized resolution scaling.
-     * `resFactor = height / 1920f` ensures that in preview (e.g. height=960) and
-     * export (height=1920) the character has the EXACT same proportion of the screen!
-     */
     private fun drawCharacterWithTransform(
         canvas: Canvas,
         width: Int,
@@ -215,12 +208,12 @@ class TimelineCanvasRenderer {
         val resFactor = height.toFloat() / BASE_CANVAS_HEIGHT
         val cx = state.characterX * width
         val cy = state.characterY * height
-        val radius = 120f * resFactor * state.characterScale * scaleMultiplier * state.scene.customScale
+        val radius = max(20f, 120f * resFactor * state.characterScale * scaleMultiplier * state.scene.customScale)
 
         val charGhostPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.argb((state.characterOpacity * 180).toInt(), 16, 185, 129)
             style = Paint.Style.STROKE
-            strokeWidth = 6f * resFactor
+            strokeWidth = max(2f, 6f * resFactor)
         }
         canvas.drawCircle(cx, cy - radius, radius * 0.45f, charGhostPaint)
         canvas.drawRoundRect(
@@ -228,7 +221,7 @@ class TimelineCanvasRenderer {
             cy - radius * 0.5f,
             cx + radius * 0.7f,
             cy + radius,
-            24f * resFactor, 24f * resFactor,
+            max(8f, 24f * resFactor), max(8f, 24f * resFactor),
             charGhostPaint
         )
     }
@@ -245,13 +238,13 @@ class TimelineCanvasRenderer {
         val captionText = strongWords.joinToString(" • ")
 
         val resFactor = height.toFloat() / BASE_CANVAS_HEIGHT
-        strongWordPaint.textSize = 72f * resFactor
-        captionStrokePaint.strokeWidth = 3f * resFactor
+        strongWordPaint.textSize = max(28f, 72f * resFactor)
+        captionStrokePaint.strokeWidth = max(1.5f, 3f * resFactor)
 
         val textBounds = Rect()
         strongWordPaint.getTextBounds(captionText, 0, captionText.length, textBounds)
-        val pillWidth = (textBounds.width() + 140f * resFactor).coerceAtLeast(360f * resFactor).coerceAtMost(width * 0.9f)
-        val pillHeight = 120f * resFactor
+        val pillWidth = (textBounds.width() + 140f * resFactor).coerceAtLeast(240f).coerceAtMost(width * 0.9f)
+        val pillHeight = max(60f, 120f * resFactor)
         val topY = height * 0.10f
 
         val pillRect = RectF(
@@ -261,11 +254,11 @@ class TimelineCanvasRenderer {
             topY + pillHeight
         )
 
-        val corner = 28f * resFactor
+        val corner = max(12f, 28f * resFactor)
         canvas.drawRoundRect(pillRect, corner, corner, captionBgPaint)
         canvas.drawRoundRect(pillRect, corner, corner, captionStrokePaint)
 
-        val textY = topY + pillHeight / 2f + (textBounds.height() / 2f) - (6f * resFactor)
+        val textY = topY + pillHeight / 2f + (textBounds.height() / 2f) - (4f * resFactor)
         canvas.drawText(captionText, width / 2f, textY, strongWordPaint)
     }
 
@@ -278,15 +271,15 @@ class TimelineCanvasRenderer {
         scene: SceneItem
     ) {
         val resFactor = height.toFloat() / BASE_CANVAS_HEIGHT
-        hudPaint.textSize = 36f * resFactor
+        hudPaint.textSize = max(18f, 36f * resFactor)
 
-        val pad = 32f * resFactor
-        val hudH = 100f * resFactor
+        val pad = max(12f, 32f * resFactor)
+        val hudH = max(60f, 100f * resFactor)
         val hudW = width - (pad * 2)
         val hudTop = height - hudH - pad
 
         val rect = RectF(pad, hudTop, pad + hudW, hudTop + hudH)
-        canvas.drawRoundRect(rect, 18f * resFactor, 18f * resFactor, hudBgPaint)
+        canvas.drawRoundRect(rect, max(8f, 18f * resFactor), max(8f, 18f * resFactor), hudBgPaint)
 
         val curM = (currentTimeSec / 60).toInt()
         val curS = (currentTimeSec % 60).toInt()
@@ -298,7 +291,7 @@ class TimelineCanvasRenderer {
         val timeStr = String.format("%02d:%02d.%02d / %02d:%02d", curM, curS, curMs, totM, totS)
         val sceneStr = "${scene.label} (${String.format("%.1f", scene.start)}s - ${String.format("%.1f", scene.end)}s)"
 
-        canvas.drawText(timeStr, pad + (20f * resFactor), hudTop + (42f * resFactor), hudPaint)
-        canvas.drawText(sceneStr, pad + (20f * resFactor), hudTop + (82f * resFactor), hudPaint)
+        canvas.drawText(timeStr, pad + max(8f, 20f * resFactor), hudTop + max(24f, 42f * resFactor), hudPaint)
+        canvas.drawText(sceneStr, pad + max(8f, 20f * resFactor), hudTop + max(48f, 82f * resFactor), hudPaint)
     }
 }
