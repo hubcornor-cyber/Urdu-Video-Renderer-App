@@ -201,7 +201,7 @@ class VideoExportService(
             if (persistentPlaybackFile.exists()) persistentPlaybackFile.delete()
             tempOutputFile.copyTo(persistentPlaybackFile, overwrite = true)
 
-            // Save to Downloads folder
+            // Save to Downloads folder with unique timestamp
             val exportFileName = "rendered_video_${System.currentTimeMillis()}.mp4"
             val savedUri = saveToDownloads(tempOutputFile, exportFileName)
             tempOutputFile.delete()
