@@ -19,7 +19,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.weight
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -66,7 +65,7 @@ import com.example.videorenderer.ui.theme.DarkBorder
 import com.example.videorenderer.ui.theme.EmeraldPrimary
 import com.example.videorenderer.ui.theme.TextMuted
 import com.example.videorenderer.viewmodel.TimelineViewModel
- 
+
 @Composable
 fun RendererScreen(
     viewModel: TimelineViewModel,
@@ -152,7 +151,7 @@ fun RendererScreen(
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary),
                     shape = RoundedCornerShape(8.dp),
-                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Default.Videocam,
@@ -173,7 +172,6 @@ fun RendererScreen(
             // RESPONSIVE CANVAS CONTAINER (Fits on screen without clipping)
             BoxWithConstraints(
                 modifier = Modifier
-                    .weight(1f)
                     .fillMaxWidth()
                     .padding(horizontal = 12.dp, vertical = 2.dp),
                 contentAlignment = Alignment.Center
